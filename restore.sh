@@ -93,36 +93,40 @@ restore_backup () {
   diff ${unpack_dir}/checksums_restore ${unpack_dir}/*/checksums
   [[ "${PIPESTATUS[0]}" != "0" ]] && echo "Checksums don't match, inconsistent database backup, please find another one!!!" && return 1
 
-  test_db_name="${mysql_db_name}_testing"
-  mysql_connect -Bse "create database if not exists ${test_db_name};grant all on ${test_db_name}.* to '${mysql_user}'@'localhost' identified by '${mysql_password}';flush privileges;"
-  [[ "${PIPESTATUS[0]}" != "0" ]] && echo "Something went wrong with test db creation!!!" && return 1
-
   #Testing db restore
-  echo "mysql_connect ${test_db_name} < ${unpack_dir}/*/${mysql_db_name}.database.table.schema"
-  mysql_connect ${test_db_name} < ${unpack_dir}/*/${mysql_db_name}.database.table.schema
-  [[ "${PIPESTATUS[0]}" != "0" ]] && echo "Couldn't restore ${test_db_name} schema backup, restore test failed!!!" && return 1
+  if [[ "$1" -eq "--dry-run" ]]; then
+    test_db_name="${mysql_db_name}_testing"
+    mysql_connect -Bse "create database if not exists ${test_db_name};grant all on ${test_db_name}.* to '${mysql_user}'@'localhost' identified by '${mysql_password}';flush privileges;"
+    [[ "${PIPESTATUS[0]}" != "0" ]] && echo "Something went wrong with test db creation!!!" && return 1
 
-  for table in ${get_tables}; do
-     echo "mysql_connect ${test_db_name} < ${table}"
-     mysql_connect ${test_db_name} < ${table}
-     [[ "${PIPESTATUS[0]}" != "0" ]] && echo "Couldn't restore ${test_db_name} ${table} backup, restore test failed!!!" && return 1
-  done
+    echo "mysql_connect ${test_db_name} < ${unpack_dir}/*/${mysql_db_name}.database.table.schema"
+    mysql_connect ${test_db_name} < ${unpack_dir}/*/${mysql_db_name}.database.table.schema
+    [[ "${PIPESTATUS[0]}" != "0" ]] && echo "Couldn't restore ${test_db_name} schema backup, restore test failed!!!" && return 1
 
-  mysql_connect -Bse "drop database ${test_db_name}"
+    for table in ${get_tables}; do
+       echo "mysql_connect ${test_db_name} < ${table}"
+       mysql_connect ${test_db_name} < ${table}
+       [[ "${PIPESTATUS[0]}" != "0" ]] && echo "Couldn't restore ${test_db_name} ${table} backup, restore test failed!!!" && return 1
+    done
+
+    mysql_connect -Bse "drop database ${test_db_name}"
+  fi
 
   #Production db restore
-  mysql_connect -Bse "create database if not exists ${mysql_db_name};grant all on ${mysql_db_name}.* to '${mysql_user}'@'localhost' identified by '${mysql_password}';flush privileges;"
-  [[ "${PIPESTATUS[0]}" != "0" ]] && echo "Something went wrong with test db creation!!!" && return 1
+  if [[ "$1" -ne "--dry-run" ]]; then
+    mysql_connect -Bse "create database if not exists ${mysql_db_name};grant all on ${mysql_db_name}.* to '${mysql_user}'@'localhost' identified by '${mysql_password}';flush privileges;"
+    [[ "${PIPESTATUS[0]}" != "0" ]] && echo "Something went wrong with test db creation!!!" && return 1
 
-  echo "mysql_connect ${mysql_db_name} < ${unpack_dir}/*/${mysql_db_name}.database.table.schema"
-  mysql_connect ${mysql_db_name} < ${unpack_dir}/*/${mysql_db_name}.database.table.schema
-  [[ "${PIPESTATUS[0]}" != "0" ]] && echo "Couldn't restore ${mysql_db_name} schema backup, restore failed!!!" && return 1
+    echo "mysql_connect ${mysql_db_name} < ${unpack_dir}/*/${mysql_db_name}.database.table.schema"
+    mysql_connect ${mysql_db_name} < ${unpack_dir}/*/${mysql_db_name}.database.table.schema
+    [[ "${PIPESTATUS[0]}" != "0" ]] && echo "Couldn't restore ${mysql_db_name} schema backup, restore failed!!!" && return 1
 
-  for table in ${get_tables}; do
-     echo "mysql_connect ${mysql_db_name} < ${table}"
-     mysql_connect ${mysql_db_name} < ${table}
-     [[ "${PIPESTATUS[0]}" != "0" ]] && echo "Couldn't restore ${mysql_db_name} ${table} backup, restore test failed!!!" && return 1
-  done
+    for table in ${get_tables}; do
+       echo "mysql_connect ${mysql_db_name} < ${table}"
+       mysql_connect ${mysql_db_name} < ${table}
+       [[ "${PIPESTATUS[0]}" != "0" ]] && echo "Couldn't restore ${mysql_db_name} ${table} backup, restore failed!!!" && return 1
+    done
+  fi
 
   rm -rf ${unpack_dir}
 
@@ -139,7 +143,7 @@ if [[ "${download_status}" -ne "0" ]]; then
   send_report restore
   cleanup
 else
-  restore_backup 2>&1 | tee ${log_file}
+  restore_backup $1 2>&1 | tee ${log_file}
   send_status="${PIPESTATUS[0]}"
   if [[ "${send_status}" -ne "0" ]]; then
     echo "Sending to ${email_receiver}"
