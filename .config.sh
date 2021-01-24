@@ -40,6 +40,8 @@ password = "$mysql_password"
 host = "$mysql_host"
 port = "$mysql_port"
 socket = "$mysql_socket"
+max-allowed-packet = 16G
+quick
 EOF
 }
 
